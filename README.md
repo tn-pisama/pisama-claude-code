@@ -10,6 +10,10 @@
 [![Downloads/month](https://img.shields.io/pypi/dm/pisama-claude-code)](https://pypistats.org/packages/pisama-claude-code)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
+## Demo
+
+![pisama-claude-code demo](assets/demo.gif)
+
 ## Why PISAMA?
 
 When working with Claude Code, have you ever wondered:
