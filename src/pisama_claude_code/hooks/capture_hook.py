@@ -224,14 +224,17 @@ def get_last_user_message(transcript_path: str) -> dict:
 
 
 def get_last_assistant_message(transcript_path: str) -> dict:
-    """Read transcript and get the last assistant message with usage.
+    """Read transcript and get recent assistant messages with usage.
 
-    Now extracts:
+    Claude Code separates thinking, text, and tool_use into different messages,
+    so we need to collect content from multiple recent assistant messages.
+
+    Extracts:
     - model: The Claude model used
     - usage: Token counts (input, output, cache)
     - input: User's input message
-    - reasoning: Extended thinking content
-    - output: Text response content
+    - reasoning: Extended thinking content (collected from recent messages)
+    - output: Text response content (collected from recent messages)
     - tool_calls: Any tool calls made
     """
     try:
@@ -240,45 +243,72 @@ def get_last_assistant_message(transcript_path: str) -> dict:
         if not transcript.exists():
             return {}
 
-        # Read last 50 lines to find messages
+        # Read last 100 lines to find messages
         with open(transcript) as f:
-            lines = f.readlines()[-50:]
+            lines = f.readlines()[-100:]
 
-        assistant_msg = None
+        # Collect content from recent assistant messages (up to 10)
+        # Claude Code sends thinking, text, tool_use as separate messages
+        all_reasoning = []
+        all_output = []
+        all_tool_calls = []
+        model = None
+        usage = {}
+        stop_reason = None
+        messages_checked = 0
+        max_messages = 10
+
         for line in reversed(lines):
+            if messages_checked >= max_messages:
+                break
             try:
                 entry = json.loads(line)
                 if entry.get("type") == "assistant" and "message" in entry:
+                    messages_checked += 1
                     msg = entry["message"]
-                    assistant_msg = msg
+
+                    # Get model and usage from first (most recent) message
+                    if model is None:
+                        model = msg.get("model")
+                        usage = msg.get("usage", {})
+                        stop_reason = msg.get("stop_reason")
+
+                    # Extract content from this message
+                    content = msg.get("content", [])
+                    if isinstance(content, list):
+                        parts = extract_content_parts(content)
+                        if parts.get("reasoning", {}).get("content"):
+                            all_reasoning.append(parts["reasoning"]["content"])
+                        if parts.get("output", {}).get("content"):
+                            all_output.append(parts["output"]["content"])
+                        if parts.get("tool_calls"):
+                            all_tool_calls.extend(parts["tool_calls"])
+
+                # Stop if we hit a user message (different turn)
+                elif entry.get("type") == "human":
                     break
+
             except json.JSONDecodeError:
                 continue
-
-        if not assistant_msg:
-            return {}
-
-        # Extract content parts (reasoning, output, tool_calls)
-        content = assistant_msg.get("content", [])
-        content_parts = extract_content_parts(content) if isinstance(content, list) else {}
 
         # Get user input
         user_msg = get_last_user_message(transcript_path)
 
-        # Get usage breakdown
-        usage = assistant_msg.get("usage", {})
+        # Combine collected content (reverse to get chronological order)
+        reasoning_text = "\n\n".join(reversed(all_reasoning)) if all_reasoning else None
+        output_text = "\n\n".join(reversed(all_output)) if all_output else None
 
         return {
-            "model": assistant_msg.get("model"),
+            "model": model,
             "usage": usage,
-            "stop_reason": assistant_msg.get("stop_reason"),
+            "stop_reason": stop_reason,
             # Structured content
             "input": user_msg.get("content"),
-            "reasoning": content_parts.get("reasoning", {}).get("content"),
-            "output": content_parts.get("output", {}).get("content"),
-            "tool_calls": content_parts.get("tool_calls"),
+            "reasoning": reasoning_text,
+            "output": output_text,
+            "tool_calls": all_tool_calls if all_tool_calls else None,
             # Legacy field for backward compatibility
-            "content": content,
+            "content": [],
         }
     except Exception:
         return {}
