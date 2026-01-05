@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5] - 2025-01-05
+
+### Fixed
+- Correctly extract user input from transcript (skip tool_result blocks)
+- Collect reasoning/output from multiple assistant messages (Claude Code splits them)
+- Look back 200 lines to find user prompts
+
 ## [0.3.4] - 2025-01-05
 
 ### Fixed
@@ -84,7 +91,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for Bash, Read, Write, Edit, Grep, Glob tools
 - Local storage in `~/.claude/pisama/traces/`
 
-[Unreleased]: https://github.com/tn-pisama/pisama-claude-code/compare/v0.3.4...HEAD
+[Unreleased]: https://github.com/tn-pisama/pisama-claude-code/compare/v0.3.5...HEAD
+[0.3.5]: https://github.com/tn-pisama/pisama-claude-code/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/tn-pisama/pisama-claude-code/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/tn-pisama/pisama-claude-code/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/tn-pisama/pisama-claude-code/compare/v0.3.1...v0.3.2

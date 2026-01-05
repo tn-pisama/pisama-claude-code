@@ -1,6 +1,6 @@
 """PISAMA Claude Code Integration - Trace capture, failure detection, and self-healing."""
 
-__version__ = "0.3.4"
+__version__ = "0.3.5"
 
 # Lazy imports to avoid loading everything at startup
 def install(force: bool = False):

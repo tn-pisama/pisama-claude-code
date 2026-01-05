@@ -53,7 +53,7 @@ def save_config(config: dict):
 
 
 @click.group()
-@click.version_option(version="0.3.4")
+@click.version_option(version="0.3.5")
 def main():
     """PISAMA Claude Code - Trace capture and sync."""
     pass
@@ -675,7 +675,7 @@ def prepare_sync_payload(traces: list, include_outputs: bool) -> dict:
 
     return {
         "source": "claude-code",
-        "version": "0.3.4",
+        "version": "0.3.5",
         "uploaded_at": datetime.now(timezone.utc).isoformat(),
         "trace_count": len(clean_traces),
         "traces": clean_traces,
