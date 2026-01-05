@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2025-01-04
+
+### Added
+- Full content capture for input, reasoning (extended thinking), and output
+- PII tokenization for captured content (via pisama-core)
+- `--content` flag to show input/reasoning/output in `traces` command
+- `--reasoning` flag to show reasoning (thinking) content only
+- Export and sync now include user_input, reasoning, ai_output fields
+
+### Changed
+- Improved failure detection accuracy with full context capture
+- Database schema updated with new content columns
+
 ## [0.3.2] - 2025-01-04
 
 ### Added
@@ -66,7 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for Bash, Read, Write, Edit, Grep, Glob tools
 - Local storage in `~/.claude/pisama/traces/`
 
-[Unreleased]: https://github.com/tn-pisama/pisama-claude-code/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/tn-pisama/pisama-claude-code/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/tn-pisama/pisama-claude-code/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/tn-pisama/pisama-claude-code/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/tn-pisama/pisama-claude-code/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/tn-pisama/pisama-claude-code/compare/v0.2.0...v0.3.0

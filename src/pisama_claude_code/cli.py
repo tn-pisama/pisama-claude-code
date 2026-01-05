@@ -79,7 +79,9 @@ def uninstall():
 @click.option("--tool", help="Filter by tool name")
 @click.option("--session", help="Filter by session ID")
 @click.option("--verbose", "-v", is_flag=True, help="Show token usage and cost")
-def traces(last: int, tool: Optional[str], session: Optional[str], verbose: bool):
+@click.option("--content", "-c", is_flag=True, help="Show input/reasoning/output content")
+@click.option("--reasoning", "-r", is_flag=True, help="Show reasoning (thinking) content only")
+def traces(last: int, tool: Optional[str], session: Optional[str], verbose: bool, content: bool, reasoning: bool):
     """View recent traces."""
     all_traces = load_recent_traces(last * 3)  # Load extra for filtering
 
@@ -119,10 +121,35 @@ def traces(last: int, tool: Optional[str], session: Optional[str], verbose: bool
         else:
             click.echo(f"{ts} | {tool_name} | {sess} | {hook}")
 
+        # Show content if requested
+        if content or reasoning:
+            user_input = t.get("user_input")
+            reasoning_content = t.get("reasoning")
+            ai_output = t.get("ai_output")
+
+            if content and user_input:
+                click.echo(f"  📥 INPUT: {_truncate(user_input, 200)}")
+            if reasoning_content:
+                click.echo(f"  🧠 REASONING: {_truncate(reasoning_content, 300)}")
+            if content and ai_output:
+                click.echo(f"  📤 OUTPUT: {_truncate(ai_output, 200)}")
+            if content or reasoning:
+                click.echo("")  # Blank line between traces
+
     # Show totals if we have usage data
     if verbose and (total_input or total_output or total_cost):
         click.echo("─" * 70)
         click.echo(f"Totals: {total_input:,} input + {total_output:,} output tokens = ${total_cost:.4f}")
+
+
+def _truncate(text: str, max_len: int = 200) -> str:
+    """Truncate text for display."""
+    if not text:
+        return ""
+    text = text.replace("\n", " ").strip()
+    if len(text) > max_len:
+        return text[:max_len] + "..."
+    return text
 
 
 @main.command()
@@ -490,14 +517,18 @@ def export(last: int, output: str, compress: bool):
             "tool_name": t.get("tool_name"),
             "hook_type": t.get("hook_type"),
             "session_id": t.get("session_id"),
-            # New fields
+            # Model and token usage
             "model": t.get("model"),
             "input_tokens": t.get("input_tokens"),
             "output_tokens": t.get("output_tokens"),
             "cache_read_tokens": t.get("cache_read_tokens"),
             "cost_usd": t.get("cost_usd"),
+            # Input/Reasoning/Output content (PII already tokenized by capture hook)
+            "user_input": t.get("user_input"),
+            "reasoning": t.get("reasoning"),
+            "ai_output": t.get("ai_output"),
         }
-        # Include sanitized input
+        # Include sanitized tool input
         inp = t.get("tool_input", {})
         if isinstance(inp, dict):
             clean["tool_input"] = sanitize_input(inp)
@@ -566,13 +597,17 @@ def normalize_trace(t: dict) -> dict:
         "session_id": session_id,
         "tool_input": tool_input,
         "working_dir": t.get("working_dir") or attrs.get("working_dir", ""),
-        # New fields
+        # Model and token usage
         "model": t.get("model"),
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
         "cache_read_tokens": cache_read,
         "cost_usd": t.get("cost_usd", 0.0),
-        "ai_response": t.get("ai_response"),
+        # Input/Reasoning/Output content
+        "user_input": t.get("user_input"),
+        "reasoning": t.get("reasoning"),
+        "ai_output": t.get("ai_output"),
+        "ai_response": t.get("ai_response"),  # Legacy field
         "_raw": t,
     }
 
@@ -614,14 +649,23 @@ def prepare_sync_payload(traces: list, include_outputs: bool) -> dict:
             "hook_type": t.get("hook_type"),
             "session_id": t.get("session_id"),
             "working_dir": anonymize_path(t.get("working_dir", "")),
+            # Model and token usage
+            "model": t.get("model"),
+            "input_tokens": t.get("input_tokens"),
+            "output_tokens": t.get("output_tokens"),
+            "cost_usd": t.get("cost_usd"),
+            # Input/Reasoning/Output content (PII already tokenized)
+            "user_input": t.get("user_input"),
+            "reasoning": t.get("reasoning"),
+            "ai_output": t.get("ai_output"),
         }
 
-        # Sanitize input
+        # Sanitize tool input
         inp = t.get("tool_input", {})
         if isinstance(inp, dict):
             clean["tool_input"] = sanitize_input(inp)
 
-        # Optionally include output
+        # Optionally include tool output
         if include_outputs:
             out = t.get("tool_output")
             if out and len(str(out)) < 1000:
@@ -631,7 +675,7 @@ def prepare_sync_payload(traces: list, include_outputs: bool) -> dict:
 
     return {
         "source": "claude-code",
-        "version": "0.3.0",
+        "version": "0.3.3",
         "uploaded_at": datetime.now(timezone.utc).isoformat(),
         "trace_count": len(clean_traces),
         "traces": clean_traces,
