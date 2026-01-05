@@ -185,7 +185,14 @@ def extract_content_parts(content_blocks: list) -> dict:
 
 
 def get_last_user_message(transcript_path: str) -> dict:
-    """Read transcript and get the last user message (input)."""
+    """Read transcript and get the last user text message (input).
+
+    Note: Claude Code "user" messages can be either:
+    1. Actual user text input (content is a string or has type="text" blocks)
+    2. Tool results (content has type="tool_result" blocks)
+
+    We want the actual user input, not tool results.
+    """
     try:
         from pathlib import Path
         transcript = Path(transcript_path)
@@ -193,29 +200,47 @@ def get_last_user_message(transcript_path: str) -> dict:
             return {}
 
         with open(transcript) as f:
-            lines = f.readlines()[-50:]  # Look back further for user message
+            lines = f.readlines()[-200:]  # Look back further for user message
 
         for line in reversed(lines):
             try:
                 entry = json.loads(line)
-                if entry.get("type") == "human" and "message" in entry:
+                # Claude Code uses "user" type
+                if entry.get("type") in ("user", "human") and "message" in entry:
                     msg = entry["message"]
                     content = msg.get("content", [])
 
-                    # Extract text from content blocks
-                    if isinstance(content, list):
+                    # Content can be a direct string (actual user input)
+                    if isinstance(content, str):
+                        # Skip system messages and interrupts
+                        if not content.startswith("[Request") and not content.startswith("[System"):
+                            return {"content": content, "role": "user"}
+
+                    # Content can be a list of blocks
+                    elif isinstance(content, list):
                         text_parts = []
+                        is_tool_result = False
+
                         for block in content:
-                            if isinstance(block, dict) and block.get("type") == "text":
-                                text_parts.append(block.get("text", ""))
+                            if isinstance(block, dict):
+                                block_type = block.get("type", "")
+                                if block_type == "tool_result":
+                                    is_tool_result = True
+                                    break  # This is a tool result, not user input
+                                elif block_type == "text":
+                                    text = block.get("text", "")
+                                    if text and not text.startswith("[Request"):
+                                        text_parts.append(text)
                             elif isinstance(block, str):
                                 text_parts.append(block)
-                        return {
-                            "content": "\n".join(text_parts) if text_parts else None,
-                            "role": "user",
-                        }
-                    elif isinstance(content, str):
-                        return {"content": content, "role": "user"}
+
+                        # Only return if this is actual user text, not tool results
+                        if text_parts and not is_tool_result:
+                            return {
+                                "content": "\n".join(text_parts),
+                                "role": "user",
+                            }
+
             except json.JSONDecodeError:
                 continue
         return {}
