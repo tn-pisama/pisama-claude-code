@@ -74,6 +74,9 @@ def install(force: bool = False):
     print("\nNext steps:")
     print("  1. Add hooks to settings.local.json (see above)")
     print("  2. Run 'pisama-cc connect --api-key <key>' to enable analysis")
+    print("\n" + "─" * 50)
+    print("⭐ If this tool saves you time/money, consider starring:")
+    print("   https://github.com/tn-pisama/pisama-claude-code")
 
 
 def _install_shell_hooks(hooks_dir: Path, force: bool):
