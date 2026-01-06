@@ -4,15 +4,20 @@ Command-line interface for capturing Claude Code traces and syncing
 to the PISAMA platform for analysis and self-healing.
 
 Usage:
-    pisama-cc install     Install hooks to ~/.claude/
-    pisama-cc uninstall   Remove hooks
-    pisama-cc status      Show current status (incl. token/cost totals)
-    pisama-cc traces      View recent traces (-v for token usage)
-    pisama-cc usage       Show token usage and cost breakdown
-    pisama-cc export      Export traces to file
-    pisama-cc connect     Connect to PISAMA platform
-    pisama-cc sync        Sync traces to platform
-    pisama-cc analyze     Analyze traces (requires platform)
+    pisama-cc install      Install hooks to ~/.claude/
+    pisama-cc uninstall    Remove hooks
+    pisama-cc status       Show current status (incl. token/cost totals)
+    pisama-cc traces       View recent traces (-v for token usage)
+    pisama-cc usage        Show token usage and cost breakdown
+    pisama-cc export       Export traces to file (JSONL or OTEL format)
+    pisama-cc export-otel  Export traces to OpenTelemetry collector
+    pisama-cc connect      Connect to PISAMA platform
+    pisama-cc sync         Sync traces to platform
+    pisama-cc analyze      Analyze traces (requires platform)
+
+OTEL Export:
+    pisama-cc export --format otel -o traces.json
+    pisama-cc export-otel -e http://localhost:4318/v1/traces
 """
 
 import click
@@ -53,10 +58,13 @@ def save_config(config: dict):
 
 
 @click.group()
-@click.version_option(version="0.3.5")
+@click.version_option(version="0.4.0")
 def main():
     """PISAMA Claude Code - Trace capture and sync."""
     pass
+
+
+GITHUB_URL = "https://github.com/tn-pisama/pisama-claude-code"
 
 
 @main.command()
@@ -65,6 +73,13 @@ def install(force: bool):
     """Install PISAMA hooks to ~/.claude/hooks/."""
     from pisama_claude_code.install import install as do_install
     do_install(force=force)
+
+    # Star reminder after install
+    click.echo("")
+    click.echo("=" * 50)
+    click.echo("If pisama-claude-code is useful, please star us!")
+    click.echo(f"   {GITHUB_URL}")
+    click.echo("=" * 50)
 
 
 @main.command()
@@ -439,6 +454,10 @@ def status():
     else:
         click.echo("   ❌ No settings file found")
 
+    # Star reminder
+    click.echo("")
+    click.echo(f"Star us on GitHub: {GITHUB_URL}")
+
 
 @main.command()
 @click.option("--last", default=100, help="Number of traces to analyze")
@@ -501,15 +520,29 @@ def usage(last: int, by_model: bool, by_tool: bool):
 @click.option("--last", default=50, help="Number of traces to export")
 @click.option("--output", "-o", default="traces-export.jsonl", help="Output file")
 @click.option("--compress", is_flag=True, help="Gzip compress output")
-def export(last: int, output: str, compress: bool):
-    """Export traces to a file."""
+@click.option("--format", "fmt", type=click.Choice(["jsonl", "otel"]), default="jsonl", help="Export format")
+def export(last: int, output: str, compress: bool, fmt: str):
+    """Export traces to a file (JSONL or OTEL format)."""
     traces_list = load_recent_traces(last)
 
     if not traces_list:
         click.echo("No traces to export")
         return
 
-    # Prepare export (redact sensitive data)
+    # Handle OTEL format
+    if fmt == "otel":
+        from pisama_claude_code.otel_export import export_to_otel_file
+
+        # Adjust default output for OTEL
+        if output == "traces-export.jsonl":
+            output = "traces-export-otel.json"
+
+        result = export_to_otel_file(traces_list, output)
+        click.echo(f"✅ Exported {result['spans_created']} spans to {output} (OTEL format)")
+        click.echo(f"   Sessions: {result['sessions_exported']}")
+        return
+
+    # Prepare JSONL export (redact sensitive data)
     export_data = []
     for t in traces_list:
         clean = {
@@ -556,6 +589,69 @@ def export(last: int, output: str, compress: bool):
 
     size_kb = output_path.stat().st_size // 1024
     click.echo(f"✅ Exported {len(export_data)} traces to {output_path} ({size_kb} KB)")
+
+
+@main.command("export-otel")
+@click.option("--last", default=50, help="Number of traces to export")
+@click.option("--endpoint", "-e", required=True, help="OTEL collector endpoint (e.g., http://localhost:4318/v1/traces)")
+@click.option("--service-name", "-s", default="claude-code", help="Service name for spans")
+@click.option("--header", "-H", multiple=True, help="Header in 'key=value' format (can be repeated)")
+def export_otel(last: int, endpoint: str, service_name: str, header: tuple):
+    """Export traces to an OpenTelemetry collector.
+
+    Examples:
+
+      # Local Jaeger
+      pisama-cc export-otel -e http://localhost:4318/v1/traces
+
+      # Honeycomb
+      pisama-cc export-otel -e https://api.honeycomb.io/v1/traces \\
+          -H "x-honeycomb-team=YOUR_API_KEY"
+
+      # Datadog (via OTEL collector)
+      pisama-cc export-otel -e http://localhost:4318/v1/traces \\
+          -s my-claude-agent
+    """
+    from pisama_claude_code.otel_export import is_otel_available, export_traces_to_otel
+
+    if not is_otel_available():
+        click.echo("❌ OpenTelemetry not installed")
+        click.echo("   Run: pip install pisama-claude-code[otel]")
+        return
+
+    traces_list = load_recent_traces(last)
+
+    if not traces_list:
+        click.echo("No traces to export")
+        return
+
+    # Parse headers
+    headers = {}
+    for h in header:
+        if "=" in h:
+            key, value = h.split("=", 1)
+            headers[key.strip()] = value.strip()
+
+    click.echo(f"📤 Exporting {len(traces_list)} traces to OTEL collector...")
+    click.echo(f"   Endpoint: {endpoint}")
+    click.echo(f"   Service: {service_name}")
+
+    try:
+        result = export_traces_to_otel(
+            traces=traces_list,
+            endpoint=endpoint,
+            service_name=service_name,
+            headers=headers if headers else None,
+        )
+
+        if result["success"]:
+            click.echo(f"✅ Exported {result['spans_created']} spans")
+            click.echo(f"   Sessions: {result['sessions_exported']}")
+            click.echo(f"   Traces: {result['traces_processed']}")
+        else:
+            click.echo("❌ Export failed")
+    except Exception as e:
+        click.echo(f"❌ Export failed: {e}")
 
 
 # Helper functions

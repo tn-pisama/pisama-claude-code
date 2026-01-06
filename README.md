@@ -3,6 +3,7 @@
 > Lightweight trace capture for Claude Code sessions with token usage and cost tracking.
 
 [![PyPI version](https://img.shields.io/pypi/v/pisama-claude-code.svg)](https://pypi.org/project/pisama-claude-code/)
+[![GitHub stars](https://img.shields.io/github/stars/tn-pisama/pisama-claude-code?style=social)](https://github.com/tn-pisama/pisama-claude-code)
 [![Python versions](https://img.shields.io/pypi/pyversions/pisama-claude-code.svg)](https://pypi.org/project/pisama-claude-code/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/tn-pisama/pisama-claude-code/actions/workflows/ci.yml/badge.svg)](https://github.com/tn-pisama/pisama-claude-code/actions/workflows/ci.yml)
@@ -115,9 +116,33 @@ pisama-cc export -o traces.jsonl
 # Export compressed
 pisama-cc export -o traces.jsonl.gz --compress
 
+# Export to OpenTelemetry format
+pisama-cc export --format otel -o traces-otel.json
+
 # Filter by date range
 pisama-cc traces --since 2025-01-01 --until 2025-01-04
 ```
+
+### OpenTelemetry Integration
+
+Export traces to any OTEL-compatible backend (Jaeger, Honeycomb, Datadog, etc.):
+
+```bash
+# Install OTEL support
+pip install pisama-claude-code[otel]
+
+# Export to local Jaeger
+pisama-cc export-otel -e http://localhost:4318/v1/traces
+
+# Export to Honeycomb
+pisama-cc export-otel -e https://api.honeycomb.io/v1/traces \
+    -H "x-honeycomb-team=YOUR_API_KEY"
+
+# Export to file in OTEL format
+pisama-cc export --format otel -o traces.json
+```
+
+OTEL export uses [GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) for token usage, costs, and model attributes.
 
 ## CLI Reference
 
@@ -126,12 +151,14 @@ pisama-cc traces --since 2025-01-01 --until 2025-01-04
 | `pisama-cc install` | Install capture hooks to `~/.claude/hooks/` |
 | `pisama-cc uninstall` | Remove hooks |
 | `pisama-cc status` | Show status, token totals, and cost |
-| `pisama-cc traces` | View recent traces (`-v` for verbose) |
+| `pisama-cc traces` | View recent traces (`-v` for verbose, `-c` for content) |
 | `pisama-cc usage` | Token usage breakdown (`--by-model`, `--by-tool`) |
-| `pisama-cc export` | Export to JSONL (`-o FILE`, `--compress`) |
+| `pisama-cc export` | Export to JSONL or OTEL (`--format otel`, `--compress`) |
+| `pisama-cc export-otel` | Export to OpenTelemetry collector (`-e ENDPOINT`) |
 | `pisama-cc connect` | Connect to PISAMA platform (optional) |
 | `pisama-cc sync` | Upload traces to platform |
 | `pisama-cc analyze` | Run failure detection (requires platform) |
+| `pisama-cc vault status` | Show PII tokenization vault status |
 
 ## Model Pricing
 
@@ -191,6 +218,20 @@ Platform features:
 - AI-powered fix suggestions
 - Self-healing automation
 - Visual dashboard
+
+## Part of the PISAMA Platform
+
+`pisama-claude-code` is the Claude Code integration for the broader **PISAMA (Platform for Intelligent Self-healing AI Multi-Agent) Testing Platform**, which supports multiple agent frameworks:
+
+| Framework | Package | Status |
+|-----------|---------|--------|
+| Claude Code | `pisama-claude-code` | Stable |
+| LangChain/LangGraph | `mao-testing` SDK | Available |
+| CrewAI | `mao-testing` SDK | Available |
+| AutoGen | `mao-testing` SDK | Available |
+| n8n | `mao-testing` SDK | Available |
+
+For other frameworks, see the [mao-testing SDK](https://github.com/tn-pisama/mao-testing).
 
 ## Contributing
 

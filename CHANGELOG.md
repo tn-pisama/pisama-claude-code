@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-01-05
+
+### Added
+- **OpenTelemetry export** - Export traces to any OTEL-compatible backend
+  - `export-otel` command for direct export to OTEL collectors (Jaeger, Honeycomb, Datadog)
+  - `export --format otel` for OTEL JSON file export
+  - GenAI semantic conventions for token usage and model attributes
+  - Optional `[otel]` dependency: `pip install pisama-claude-code[otel]`
+
+### Changed
+- Updated description to reflect role in broader PISAMA platform
+
 ## [0.3.5] - 2025-01-05
 
 ### Fixed
@@ -91,7 +103,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for Bash, Read, Write, Edit, Grep, Glob tools
 - Local storage in `~/.claude/pisama/traces/`
 
-[Unreleased]: https://github.com/tn-pisama/pisama-claude-code/compare/v0.3.5...HEAD
+[Unreleased]: https://github.com/tn-pisama/pisama-claude-code/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/tn-pisama/pisama-claude-code/compare/v0.3.5...v0.4.0
 [0.3.5]: https://github.com/tn-pisama/pisama-claude-code/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/tn-pisama/pisama-claude-code/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/tn-pisama/pisama-claude-code/compare/v0.3.2...v0.3.3
