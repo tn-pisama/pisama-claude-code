@@ -74,13 +74,6 @@ def install(force: bool):
     from pisama_claude_code.install import install as do_install
     do_install(force=force)
 
-    # Star reminder after install
-    click.echo("")
-    click.echo("=" * 50)
-    click.echo("If pisama-claude-code is useful, please star us!")
-    click.echo(f"   {GITHUB_URL}")
-    click.echo("=" * 50)
-
 
 @main.command()
 def uninstall():
