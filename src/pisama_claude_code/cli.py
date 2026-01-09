@@ -3,17 +3,29 @@
 Command-line interface for capturing Claude Code traces and syncing
 to the PISAMA platform for analysis and self-healing.
 
+Quick Start (3 lines!):
+    pip install pisama-claude-code    # Install package
+    pisama-cc install                 # Install hooks + auto-config
+    pisama-cc verify                  # Confirm everything works
+
 Usage:
-    pisama-cc install      Install hooks to ~/.claude/
+    pisama-cc install      Install hooks to ~/.claude/ (auto-updates settings)
+    pisama-cc verify       Verify installation is working
     pisama-cc uninstall    Remove hooks
     pisama-cc status       Show current status (incl. token/cost totals)
     pisama-cc traces       View recent traces (-v for token usage)
     pisama-cc usage        Show token usage and cost breakdown
+    pisama-cc demo         Run demo detection on sample traces
     pisama-cc export       Export traces to file (JSONL or OTEL format)
     pisama-cc export-otel  Export traces to OpenTelemetry collector
     pisama-cc connect      Connect to PISAMA platform
     pisama-cc sync         Sync traces to platform
     pisama-cc analyze      Analyze traces (requires platform)
+
+Self-Healing:
+    pisama-cc fix list                   List available fixes
+    pisama-cc fix show FIX_ID            Show fix details
+    pisama-cc fix apply FIX_ID           Apply a suggested fix
 
 OTEL Export:
     pisama-cc export --format otel -o traces.json
@@ -69,10 +81,32 @@ GITHUB_URL = "https://github.com/tn-pisama/pisama-claude-code"
 
 @main.command()
 @click.option("--force", "-f", is_flag=True, help="Overwrite existing hooks")
-def install(force: bool):
-    """Install PISAMA hooks to ~/.claude/hooks/."""
+@click.option("--no-auto-config", is_flag=True, help="Don't auto-update settings.local.json")
+def install(force: bool, no_auto_config: bool):
+    """Install PISAMA hooks to ~/.claude/hooks/.
+
+    By default, automatically updates settings.local.json to enable hooks.
+    Use --no-auto-config to skip automatic configuration.
+    """
     from pisama_claude_code.install import install as do_install
-    do_install(force=force)
+    do_install(force=force, auto_config=not no_auto_config)
+
+
+@main.command()
+def verify():
+    """Verify PISAMA installation is working correctly.
+
+    Checks:
+    - Hook files exist and are executable
+    - settings.local.json has PISAMA hooks configured
+    - All required directories exist
+
+    Exit code 0 if all checks pass, 1 otherwise.
+    """
+    from pisama_claude_code.install import verify as do_verify
+    import sys
+    success = do_verify()
+    sys.exit(0 if success else 1)
 
 
 @main.command()
@@ -80,6 +114,208 @@ def uninstall():
     """Remove PISAMA hooks from ~/.claude/hooks/."""
     from pisama_claude_code.install import uninstall as do_uninstall
     do_uninstall()
+
+
+@main.command()
+@click.option("--verbose", "-v", is_flag=True, help="Show detailed detection info")
+def demo(verbose: bool):
+    """Run a demo detection on sample traces.
+
+    This demonstrates PISAMA's failure detection capabilities without
+    requiring platform connection. Uses bundled sample traces that
+    showcase common agent failures.
+
+    Example:
+        pisama-cc demo           # Quick demo
+        pisama-cc demo -v        # Verbose with details
+    """
+    import importlib.resources
+
+    click.echo("")
+    click.echo("🚀 PISAMA Demo - Instant Failure Detection")
+    click.echo("=" * 55)
+    click.echo("")
+
+    # Load sample trace from package
+    try:
+        # Python 3.9+ compatible way to get package resources
+        try:
+            from importlib.resources import files
+            sample_path = files("pisama_claude_code.sample_traces").joinpath("demo_loop.jsonl")
+            sample_content = sample_path.read_text()
+        except (ImportError, TypeError):
+            # Fallback for older Python
+            import pkg_resources
+            sample_content = pkg_resources.resource_string(
+                "pisama_claude_code", "sample_traces/demo_loop.jsonl"
+            ).decode("utf-8")
+    except Exception as e:
+        click.echo(f"❌ Could not load sample traces: {e}")
+        click.echo("   Try reinstalling: pip install --upgrade pisama-claude-code")
+        return
+
+    # Parse traces
+    traces = []
+    for line in sample_content.strip().split("\n"):
+        if line.strip():
+            try:
+                traces.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+
+    if not traces:
+        click.echo("❌ No valid traces in sample file")
+        return
+
+    click.echo(f"📥 Loaded {len(traces)} sample tool calls")
+    click.echo("")
+
+    # Run local loop detection
+    click.echo("🔍 Analyzing for failures...")
+    click.echo("")
+
+    detections = _run_local_detection(traces)
+
+    if not detections:
+        click.echo("✅ No failures detected in sample trace")
+        click.echo("")
+        click.echo("Try running on your own traces:")
+        click.echo("   pisama-cc traces     # View captured traces")
+        click.echo("   pisama-cc analyze    # Analyze with platform (requires connection)")
+        return
+
+    # Display detections with explanations
+    for i, detection in enumerate(detections, 1):
+        severity = detection.get("severity", 50)
+        if severity >= 70:
+            icon = "🔴"
+        elif severity >= 40:
+            icon = "🟡"
+        else:
+            icon = "🟢"
+
+        click.echo(f"{icon} Detection #{i}: {detection.get('type', 'Unknown Failure')}")
+        click.echo(f"   Confidence: {detection.get('confidence', 0)}%")
+        click.echo("")
+
+        # Plain English explanation
+        explanation = detection.get("explanation", "")
+        if explanation:
+            click.echo(f"   📝 {explanation}")
+            click.echo("")
+
+        # Business impact
+        impact = detection.get("business_impact", "")
+        if impact:
+            click.echo(f"   ⚠️  Impact: {impact}")
+
+        # Suggested action
+        action = detection.get("suggested_action", "")
+        if action:
+            click.echo(f"   💡 Fix: {action}")
+
+        click.echo("")
+
+        # Verbose details
+        if verbose and detection.get("details"):
+            click.echo("   Technical Details:")
+            for key, value in detection.get("details", {}).items():
+                click.echo(f"      {key}: {value}")
+            click.echo("")
+
+    # Celebration and next steps
+    click.echo("=" * 55)
+    click.echo("🎉 First detection complete!")
+    click.echo("")
+    click.echo("📋 Next Steps:")
+    click.echo("   1. Install hooks to capture your traces:")
+    click.echo("      pisama-cc install")
+    click.echo("")
+    click.echo("   2. Use Claude Code normally - traces are captured automatically")
+    click.echo("")
+    click.echo("   3. View your traces:")
+    click.echo("      pisama-cc traces")
+    click.echo("")
+    click.echo("   4. Connect to platform for advanced analysis:")
+    click.echo("      pisama-cc connect --api-key <your-key>")
+    click.echo("")
+    click.echo(f"Star us on GitHub: {GITHUB_URL}")
+    click.echo("")
+
+
+def _run_local_detection(traces: list) -> list:
+    """Run basic local detection without platform connection.
+
+    Currently supports:
+    - Loop detection (exact message repetition)
+    - Tool loop detection (same tool repeated)
+    """
+    detections = []
+
+    # Check for loop detection
+    if len(traces) >= 3:
+        # Check for exact message loops
+        tool_calls = [(t.get("tool_name", ""), json.dumps(t.get("tool_input", {}), sort_keys=True)) for t in traces]
+
+        # Find repeated sequences
+        consecutive_same = 1
+        max_consecutive = 1
+        repeated_tool = None
+        repeated_input = None
+
+        for i in range(1, len(tool_calls)):
+            if tool_calls[i] == tool_calls[i - 1]:
+                consecutive_same += 1
+                if consecutive_same > max_consecutive:
+                    max_consecutive = consecutive_same
+                    repeated_tool = tool_calls[i][0]
+                    repeated_input = tool_calls[i][1]
+            else:
+                consecutive_same = 1
+
+        # Report loop if 3+ consecutive identical calls
+        if max_consecutive >= 3:
+            confidence = min(95, 70 + (max_consecutive - 3) * 5)
+            severity = min(80, 40 + max_consecutive * 5)
+
+            detections.append({
+                "type": "Tool Loop Detected",
+                "confidence": confidence,
+                "severity": severity,
+                "explanation": f"Your agent called '{repeated_tool}' {max_consecutive} times in a row with identical parameters. This indicates the agent is stuck repeating the same action without making progress.",
+                "business_impact": "This wastes compute resources and API credits. The agent will likely time out without completing the task.",
+                "suggested_action": f"Add a retry limit (recommend max 3 attempts) for '{repeated_tool}'. Consider caching results to avoid duplicate calls.",
+                "details": {
+                    "tool_name": repeated_tool,
+                    "repetition_count": max_consecutive,
+                    "detection_method": "exact_hash_match",
+                },
+            })
+
+    # Check for semantic loops (same tool, different params but same pattern)
+    tool_sequence = [t.get("tool_name", "") for t in traces]
+    tool_counts = {}
+    for tool in tool_sequence:
+        tool_counts[tool] = tool_counts.get(tool, 0) + 1
+
+    for tool, count in tool_counts.items():
+        if count >= 4 and count / len(traces) > 0.6:
+            # High concentration of one tool
+            detections.append({
+                "type": "Tool Overuse Pattern",
+                "confidence": 75,
+                "severity": 45,
+                "explanation": f"'{tool}' was called {count} times ({int(count/len(traces)*100)}% of all calls). This suggests the agent may be over-relying on one approach.",
+                "business_impact": "The agent might be missing more effective strategies or tools for the task.",
+                "suggested_action": f"Review why '{tool}' is being called so frequently. Consider adding alternative approaches or result caching.",
+                "details": {
+                    "tool_name": tool,
+                    "call_count": count,
+                    "percentage": f"{int(count/len(traces)*100)}%",
+                },
+            })
+
+    return detections
 
 
 @main.command()
@@ -342,6 +578,273 @@ def display_analysis_results(results: dict):
     click.echo("\n" + "─" * 50)
     click.echo(f"Found {len(detections)} issue(s)")
     click.echo(f"View details at: {results.get('dashboard_url', 'https://app.maotesting.com')}")
+
+
+# =============================================================================
+# FIX COMMANDS - Self-Healing Fix Application
+# =============================================================================
+
+@main.group()
+def fix():
+    """Self-healing fix commands."""
+    pass
+
+
+@fix.command("list")
+@click.option("--detection-id", help="Show fixes for specific detection")
+def fix_list(detection_id: Optional[str]):
+    """List available fixes for detected issues."""
+    if httpx is None:
+        click.echo("❌ httpx required. Run: pip install httpx")
+        return
+
+    config = get_config()
+
+    if not config.get("api_key"):
+        click.echo("❌ Fix listing requires platform connection")
+        click.echo("   Run: pisama-cc connect --api-key <your-key>")
+        return
+
+    click.echo("🔧 Available Fixes")
+    click.echo("=" * 60)
+
+    try:
+        # Get recent detections with fixes
+        endpoint = f"{config['api_url']}/v1/detections"
+        if detection_id:
+            endpoint = f"{config['api_url']}/v1/detections/{detection_id}/fixes"
+
+        response = httpx.get(
+            endpoint,
+            headers={"Authorization": f"Bearer {config['api_key']}"},
+            timeout=30,
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            if detection_id:
+                # Single detection fixes
+                suggestions = data.get("suggestions", [])
+                if suggestions:
+                    for i, fix_data in enumerate(suggestions, 1):
+                        click.echo(f"\n{i}. {fix_data.get('title', 'Unnamed Fix')}")
+                        click.echo(f"   ID: {fix_data.get('id', 'unknown')}")
+                        click.echo(f"   Type: {fix_data.get('fix_type', 'unknown')}")
+                        click.echo(f"   Confidence: {fix_data.get('confidence', 'unknown')}")
+                        click.echo(f"   {fix_data.get('description', '')[:100]}")
+                else:
+                    click.echo("No fixes available for this detection")
+            else:
+                # List detections
+                detections = data if isinstance(data, list) else data.get("detections", [])
+                for d in detections[:10]:
+                    click.echo(f"\n• {d.get('detection_type', 'unknown')} [{d.get('id', '')[:8]}]")
+                    click.echo(f"  Confidence: {d.get('confidence', 0)}%")
+                    click.echo(f"  Run: pisama-cc fix list --detection-id {d.get('id', '')}")
+        else:
+            click.echo(f"❌ Failed to fetch fixes: {response.status_code}")
+    except httpx.ConnectError:
+        click.echo(f"❌ Could not connect to {config['api_url']}")
+
+
+@fix.command("show")
+@click.argument("fix_id")
+@click.option("--detection-id", required=True, help="Detection ID for the fix")
+def fix_show(fix_id: str, detection_id: str):
+    """Show detailed fix information with code changes."""
+    if httpx is None:
+        click.echo("❌ httpx required. Run: pip install httpx")
+        return
+
+    config = get_config()
+
+    if not config.get("api_key"):
+        click.echo("❌ Fix viewing requires platform connection")
+        click.echo("   Run: pisama-cc connect --api-key <your-key>")
+        return
+
+    try:
+        response = httpx.get(
+            f"{config['api_url']}/v1/detections/{detection_id}/fixes",
+            headers={"Authorization": f"Bearer {config['api_key']}"},
+            timeout=30,
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            suggestions = data.get("suggestions", [])
+
+            # Find the specific fix
+            fix_data = None
+            for s in suggestions:
+                if s.get("id") == fix_id:
+                    fix_data = s
+                    break
+
+            if not fix_data:
+                click.echo(f"❌ Fix {fix_id} not found")
+                return
+
+            click.echo("🔧 Fix Details")
+            click.echo("=" * 60)
+            click.echo(f"\nTitle: {fix_data.get('title', 'Unnamed')}")
+            click.echo(f"Type: {fix_data.get('fix_type', 'unknown')}")
+            click.echo(f"Confidence: {fix_data.get('confidence', 'unknown')}")
+
+            if fix_data.get("breaking_changes"):
+                click.echo("\n⚠️  WARNING: This fix may introduce breaking changes")
+
+            if fix_data.get("requires_testing"):
+                click.echo("ℹ️  This fix requires testing after application")
+
+            click.echo(f"\nDescription:\n{fix_data.get('description', 'No description')}")
+            click.echo(f"\nRationale:\n{fix_data.get('rationale', 'No rationale')}")
+
+            # Show code changes
+            code_changes = fix_data.get("code_changes", [])
+            if code_changes:
+                click.echo("\n" + "─" * 60)
+                click.echo("Code Changes:")
+                for change in code_changes:
+                    click.echo(f"\n📄 {change.get('file_path', 'unknown')} ({change.get('language', '')})")
+                    if change.get("description"):
+                        click.echo(f"   {change['description']}")
+                    if change.get("diff"):
+                        click.echo("\n" + change["diff"])
+                    elif change.get("suggested_code"):
+                        click.echo("\nSuggested code:")
+                        click.echo(change["suggested_code"])
+
+            click.echo("\n" + "─" * 60)
+            click.echo(f"To apply: pisama-cc fix apply {fix_id} --detection-id {detection_id}")
+        else:
+            click.echo(f"❌ Failed to fetch fix details: {response.status_code}")
+    except httpx.ConnectError:
+        click.echo(f"❌ Could not connect to {config['api_url']}")
+
+
+@fix.command("apply")
+@click.argument("fix_id")
+@click.option("--detection-id", required=True, help="Detection ID for the fix")
+@click.option("--dry-run", is_flag=True, help="Show what would be applied without making changes")
+@click.option("--force", "-f", is_flag=True, help="Apply without confirmation")
+def fix_apply(fix_id: str, detection_id: str, dry_run: bool, force: bool):
+    """Apply a suggested fix for a detected issue.
+
+    This records the fix as applied and shows the code changes to implement.
+    The actual code changes need to be applied manually or via your IDE.
+
+    Examples:
+
+        # View a fix before applying
+        pisama-cc fix show FIX_ID --detection-id DETECTION_ID
+
+        # Apply a fix
+        pisama-cc fix apply FIX_ID --detection-id DETECTION_ID
+
+        # Dry run to see what would happen
+        pisama-cc fix apply FIX_ID --detection-id DETECTION_ID --dry-run
+    """
+    if httpx is None:
+        click.echo("❌ httpx required. Run: pip install httpx")
+        return
+
+    config = get_config()
+
+    if not config.get("api_key"):
+        click.echo("❌ Fix application requires platform connection")
+        click.echo("   Run: pisama-cc connect --api-key <your-key>")
+        return
+
+    try:
+        # First, get the fix details
+        response = httpx.get(
+            f"{config['api_url']}/v1/detections/{detection_id}/fixes",
+            headers={"Authorization": f"Bearer {config['api_key']}"},
+            timeout=30,
+        )
+
+        if response.status_code != 200:
+            click.echo(f"❌ Failed to fetch fix: {response.status_code}")
+            return
+
+        data = response.json()
+        suggestions = data.get("suggestions", [])
+
+        # Find the specific fix
+        fix_data = None
+        for s in suggestions:
+            if s.get("id") == fix_id:
+                fix_data = s
+                break
+
+        if not fix_data:
+            click.echo(f"❌ Fix {fix_id} not found")
+            return
+
+        # Display fix summary
+        click.echo("🔧 Applying Fix")
+        click.echo("=" * 60)
+        click.echo(f"\nTitle: {fix_data.get('title', 'Unnamed')}")
+        click.echo(f"Type: {fix_data.get('fix_type', 'unknown')}")
+        click.echo(f"Detection: {detection_id[:8]}...")
+
+        if fix_data.get("breaking_changes"):
+            click.echo("\n⚠️  WARNING: This fix may introduce breaking changes!")
+
+        # Show code changes
+        code_changes = fix_data.get("code_changes", [])
+        if code_changes:
+            click.echo("\nCode changes to apply:")
+            for change in code_changes:
+                click.echo(f"\n📄 {change.get('file_path', 'unknown')}")
+                if change.get("diff"):
+                    click.echo(change["diff"][:500])
+                    if len(change.get("diff", "")) > 500:
+                        click.echo("... (truncated, run 'fix show' to see full diff)")
+
+        if dry_run:
+            click.echo("\n" + "─" * 60)
+            click.echo("🔍 DRY RUN - No changes made")
+            click.echo("Remove --dry-run to apply this fix")
+            return
+
+        # Confirm application
+        if not force:
+            if not click.confirm("\nApply this fix?"):
+                click.echo("Cancelled")
+                return
+
+        # Apply the fix via API
+        apply_response = httpx.post(
+            f"{config['api_url']}/v1/detections/{detection_id}/fixes/{fix_id}/apply",
+            headers={"Authorization": f"Bearer {config['api_key']}"},
+            timeout=30,
+        )
+
+        if apply_response.status_code in (200, 201):
+            result = apply_response.json()
+            click.echo("\n" + "=" * 60)
+            click.echo("✅ Fix recorded as applied!")
+            click.echo(f"\n{result.get('message', 'Fix applied successfully.')}")
+
+            if result.get("rollback_available"):
+                click.echo("\nRollback is available if needed.")
+
+            # Show next steps
+            click.echo("\n📋 Next Steps:")
+            click.echo("1. Review the code changes above")
+            click.echo("2. Apply the changes to your codebase")
+            click.echo("3. Test the affected code paths")
+            click.echo("4. Commit the changes")
+        else:
+            click.echo(f"\n❌ Failed to apply fix: {apply_response.status_code}")
+            click.echo(f"   {apply_response.text[:200]}")
+
+    except httpx.ConnectError:
+        click.echo(f"❌ Could not connect to {config['api_url']}")
+    except Exception as e:
+        click.echo(f"❌ Error: {e}")
 
 
 @main.command()
