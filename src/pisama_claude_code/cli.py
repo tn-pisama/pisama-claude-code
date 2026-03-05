@@ -1774,5 +1774,336 @@ def tokenize_config():
             click.echo(f"  {e}")
 
 
+# =============================================================================
+# LITE MODE COMMANDS - Standalone detection without platform
+# =============================================================================
+
+@main.group()
+def lite():
+    """Lite mode - standalone detection without a platform backend.
+
+    Run failure detection locally using SQLite storage. No auth,
+    no network, no Postgres required.
+
+    Quick start:
+        pisama-cc lite init       Initialize lite mode config
+        pisama-cc lite analyze    Analyze a trace file
+        pisama-cc lite dashboard  View detection summary
+        pisama-cc lite export     Export results for platform import
+    """
+    pass
+
+
+@lite.command("init")
+@click.option("--db-path", type=click.Path(), help="Custom SQLite database path")
+@click.option("--traces-dir", type=click.Path(), help="Custom traces directory")
+@click.option(
+    "--detectors",
+    help="Comma-separated list of detectors to enable (default: all)",
+)
+@click.option(
+    "--severity-threshold",
+    type=int,
+    default=40,
+    help="Minimum severity to report (default: 40)",
+)
+def lite_init(
+    db_path: Optional[str],
+    traces_dir: Optional[str],
+    detectors: Optional[str],
+    severity_threshold: int,
+):
+    """Initialize lite mode configuration.
+
+    Creates ~/.pisama/config.yaml with default settings.
+    Run this once to set up lite mode for the first time.
+
+    Example:
+        pisama-cc lite init
+        pisama-cc lite init --detectors loop,overflow
+        pisama-cc lite init --severity-threshold 60
+    """
+    try:
+        from .lite_config import LiteConfig, DEFAULT_CONFIG_DIR, DEFAULT_CONFIG_PATH
+    except ImportError:
+        click.echo("Error: lite mode modules not available")
+        return
+
+    config = LiteConfig()
+
+    if db_path:
+        config.db_path = Path(db_path).expanduser()
+    if traces_dir:
+        config.traces_dir = Path(traces_dir).expanduser()
+    if detectors:
+        config.enabled_detectors = [d.strip() for d in detectors.split(",") if d.strip()]
+    config.severity_threshold = severity_threshold
+
+    # Create directories
+    DEFAULT_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    config.traces_dir.mkdir(parents=True, exist_ok=True)
+    config.db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Save config
+    try:
+        config.save()
+    except ImportError:
+        click.echo("Warning: PyYAML not installed. Saving as JSON fallback.")
+        fallback_path = DEFAULT_CONFIG_DIR / "config.json"
+        fallback_path.write_text(json.dumps(config.to_dict(), indent=2))
+        click.echo(f"   Config saved to: {fallback_path}")
+        click.echo("   Install PyYAML for YAML support: pip install pyyaml")
+
+    click.echo("PISAMA Lite Mode Initialized")
+    click.echo("=" * 50)
+    click.echo(f"   Config: {DEFAULT_CONFIG_PATH}")
+    click.echo(f"   Database: {config.db_path}")
+    click.echo(f"   Traces dir: {config.traces_dir}")
+    click.echo(f"   Severity threshold: {config.severity_threshold}")
+
+    if config.enabled_detectors:
+        click.echo(f"   Detectors: {', '.join(config.enabled_detectors)}")
+    else:
+        click.echo("   Detectors: all (loop, overflow, repetition)")
+
+    click.echo("")
+    click.echo("Next steps:")
+    click.echo("   pisama-cc lite analyze <trace-file>   Analyze a trace file")
+    click.echo("   pisama-cc lite dashboard              View detection summary")
+
+
+@lite.command("analyze")
+@click.argument("trace_path", type=click.Path(exists=True))
+@click.option("--verbose", "-v", is_flag=True, help="Show detailed detection info")
+@click.option(
+    "--detectors",
+    help="Comma-separated list of detectors to run (overrides config)",
+)
+@click.option("--session-id", help="Custom session ID for this analysis")
+def lite_analyze(
+    trace_path: str,
+    verbose: bool,
+    detectors: Optional[str],
+    session_id: Optional[str],
+):
+    """Analyze a trace file for failures.
+
+    Supports JSON arrays and JSONL files. Runs loop detection,
+    overflow detection, and content repetition detection locally.
+
+    Examples:
+        pisama-cc lite analyze traces.jsonl
+        pisama-cc lite analyze session.json -v
+        pisama-cc lite analyze traces.jsonl --detectors loop,overflow
+    """
+    try:
+        from .lite import LiteRunner
+        from .lite_config import LiteConfig
+    except ImportError as e:
+        click.echo(f"Error: lite mode modules not available: {e}")
+        return
+
+    config = LiteConfig.load_or_default()
+
+    # Override detectors if specified on command line
+    if detectors:
+        config.enabled_detectors = [d.strip() for d in detectors.split(",") if d.strip()]
+
+    runner = LiteRunner(config=config)
+    path = Path(trace_path)
+
+    click.echo("")
+    click.echo(f"Analyzing: {path.name}")
+    click.echo("=" * 55)
+
+    try:
+        result = runner.analyze_trace_file(path)
+    except Exception as e:
+        click.echo(f"Error analyzing trace file: {e}")
+        return
+
+    entries_count = result["entries_count"]
+    detection_count = result["detection_count"]
+    detectors_run = result["detectors_run"]
+
+    click.echo(f"   Entries: {entries_count}")
+    click.echo(f"   Detectors run: {', '.join(detectors_run)}")
+    click.echo(f"   Session: {result['session_id'][:16]}")
+    click.echo("")
+
+    if detection_count == 0:
+        click.echo("No failures detected.")
+        click.echo("")
+        return
+
+    click.echo(f"Found {detection_count} issue(s):")
+    click.echo("")
+
+    for det in result["detections"]:
+        if not det["detected"]:
+            continue
+
+        severity = det["severity"]
+        if severity >= 70:
+            level = "HIGH"
+        elif severity >= 40:
+            level = "MEDIUM"
+        else:
+            level = "LOW"
+
+        click.echo(f"  [{level}] {det['detector']} (severity={severity}, confidence={det['confidence']:.0%})")
+        click.echo(f"         Method: {det['method']}")
+
+        if verbose and det.get("details"):
+            for key, value in det["details"].items():
+                click.echo(f"         {key}: {value}")
+            click.echo("")
+
+    click.echo("")
+    click.echo(f"Results stored in: {config.db_path}")
+    click.echo("Run 'pisama-cc lite dashboard' for aggregate view.")
+
+
+@lite.command("dashboard")
+@click.option("--session", help="Filter by session ID")
+def lite_dashboard(session: Optional[str]):
+    """Show detection summary dashboard.
+
+    Displays aggregate statistics, recent detections, and
+    per-detector breakdowns from the local SQLite database.
+
+    Examples:
+        pisama-cc lite dashboard
+        pisama-cc lite dashboard --session abc123
+    """
+    try:
+        from .lite import LiteRunner
+        from .lite_config import LiteConfig
+    except ImportError as e:
+        click.echo(f"Error: lite mode modules not available: {e}")
+        return
+
+    config = LiteConfig.load_or_default()
+
+    if not config.db_path.exists():
+        click.echo("No lite mode data found.")
+        click.echo("Run 'pisama-cc lite init' to initialize, then analyze some traces.")
+        return
+
+    runner = LiteRunner(config=config)
+    data = runner.get_dashboard_data()
+    stats = data["stats"]
+
+    click.echo("")
+    click.echo("PISAMA Lite Mode Dashboard")
+    click.echo("=" * 55)
+
+    # Overall stats
+    click.echo("")
+    click.echo("  Overview:")
+    click.echo(f"    Total analyses:     {stats['total_detections']}")
+    click.echo(f"    Issues found:       {stats['total_positive']}")
+    click.echo(f"    Quality scores:     {stats['total_scores']}")
+    click.echo(f"    Sessions tracked:   {stats['sessions']}")
+
+    # Severity breakdown
+    by_sev = stats.get("by_severity", {})
+    if any(v > 0 for v in by_sev.values()):
+        click.echo("")
+        click.echo("  By Severity:")
+        click.echo(f"    High (70+):   {by_sev.get('high', 0)}")
+        click.echo(f"    Medium (40-69): {by_sev.get('medium', 0)}")
+        click.echo(f"    Low (<40):    {by_sev.get('low', 0)}")
+
+    # Per-detector breakdown
+    by_det = stats.get("by_detector", {})
+    if by_det:
+        click.echo("")
+        click.echo("  By Detector:")
+        for name, counts in sorted(by_det.items()):
+            detected = counts.get("detected", 0)
+            total = counts.get("total", 0)
+            rate = f"{detected/total*100:.0f}%" if total > 0 else "0%"
+            click.echo(f"    {name:<15} {detected:>4} / {total:>4} ({rate})")
+
+    # Recent detections
+    recent = data.get("recent_detections", [])
+    if recent:
+        click.echo("")
+        click.echo("  Recent Issues (last 10):")
+        click.echo(f"  {'Detector':<15} {'Severity':>8} {'Confidence':>10} {'Session':<14} {'When'}")
+        click.echo("  " + "-" * 65)
+
+        for d in recent:
+            created = d["created_at"][:19].replace("T", " ")
+            click.echo(
+                f"  {d['detector']:<15} {d['severity']:>8} {d['confidence']:>9.0%} "
+                f"{d['session_id']:<14} {created}"
+            )
+
+    click.echo("")
+    click.echo(f"  Database: {data['db_path']}")
+    click.echo("")
+
+
+@lite.command("export")
+@click.option(
+    "-o",
+    "--output",
+    default="pisama-lite-export.json",
+    help="Output file path (default: pisama-lite-export.json)",
+)
+@click.option(
+    "--format",
+    "fmt",
+    type=click.Choice(["json"]),
+    default="json",
+    help="Export format (default: json)",
+)
+def lite_export(output: str, fmt: str):
+    """Export detection results for platform import.
+
+    Creates a JSON file that can be imported into the PISAMA platform
+    for advanced analysis, team dashboards, and historical tracking.
+
+    Examples:
+        pisama-cc lite export
+        pisama-cc lite export -o my-results.json
+    """
+    try:
+        from .lite import LiteRunner
+        from .lite_config import LiteConfig
+    except ImportError as e:
+        click.echo(f"Error: lite mode modules not available: {e}")
+        return
+
+    config = LiteConfig.load_or_default()
+
+    if not config.db_path.exists():
+        click.echo("No lite mode data found. Run some analyses first.")
+        return
+
+    runner = LiteRunner(config=config)
+    output_path = Path(output)
+
+    try:
+        count = runner.export_results(output_path, format=fmt)
+    except Exception as e:
+        click.echo(f"Export failed: {e}")
+        return
+
+    click.echo(f"Exported {count} detection(s) to {output_path}")
+    click.echo("")
+
+    if count > 0 and config.platform_url:
+        click.echo("To import into PISAMA platform:")
+        click.echo(f"   curl -X POST {config.platform_url}/v1/import/lite \\")
+        click.echo(f"     -H 'Authorization: Bearer <api-key>' \\")
+        click.echo(f"     -F 'file=@{output_path}'")
+    elif count > 0:
+        click.echo("Connect to platform to import:")
+        click.echo("   pisama-cc lite init  (set platform_url in config)")
+
+
 if __name__ == "__main__":
     main()

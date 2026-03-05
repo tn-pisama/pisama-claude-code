@@ -67,13 +67,16 @@ otel = [
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-exporter-otlp-proto-http>=1.20.0",
 ]
+lite = [
+    "pyyaml>=6.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",
 ]
 all = [
-    "pisama-claude-code[core,otel]",
+    "pisama-claude-code[core,otel,lite]",
 ]
 
 [project.scripts]
