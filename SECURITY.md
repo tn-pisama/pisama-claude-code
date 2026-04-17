@@ -18,7 +18,7 @@ We take security vulnerabilities seriously. If you discover a security issue, pl
 
 **Please do NOT report security vulnerabilities through public GitHub issues.**
 
-Instead, please report them via email to: **security@pisama.dev**
+Instead, please report them via email to: **security@pisama.ai**
 
 Include the following information:
 
@@ -93,5 +93,5 @@ We appreciate responsible disclosure and will acknowledge security researchers w
 
 ## Contact
 
-- Security issues: security@pisama.dev
-- General questions: team@pisama.dev
+- Security issues: security@pisama.ai
+- General questions: team@pisama.ai

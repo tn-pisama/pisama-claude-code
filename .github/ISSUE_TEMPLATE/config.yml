@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Documentation
-    url: https://pisama.dev/docs/claude-code
+    url: https://docs.pisama.ai/guides/integrations/claude-code
     about: Check the documentation for usage guides and examples
   - name: Discussions
     url: https://github.com/tn-pisama/pisama-claude-code/discussions

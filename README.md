@@ -15,7 +15,7 @@
 
 ![pisama-claude-code demo](assets/demo.gif)
 
-## Why PISAMA?
+## Why Pisama?
 
 When working with Claude Code, have you ever wondered:
 
@@ -28,7 +28,7 @@ When working with Claude Code, have you ever wondered:
 
 ```
 ┌─────────────────────┐         ┌─────────────────────┐
-│   Claude Code       │         │   PISAMA Platform   │
+│   Claude Code       │         │   Pisama Platform   │
 │   + pisama-cc       │ ──────▶ │   (optional)        │
 │   (capture)         │  sync   │   - detection       │
 └─────────────────────┘         │   - self-healing    │
@@ -92,7 +92,7 @@ Total cost:        $    52.34
 ```bash
 $ pisama-cc status
 
-📊 PISAMA Status
+📊 Pisama Status
 ========================================
 
 🔧 Hook Installation:
@@ -155,7 +155,7 @@ OTEL export uses [GenAI semantic conventions](https://opentelemetry.io/docs/spec
 | `pisama-cc usage` | Token usage breakdown (`--by-model`, `--by-tool`) |
 | `pisama-cc export` | Export to JSONL or OTEL (`--format otel`, `--compress`) |
 | `pisama-cc export-otel` | Export to OpenTelemetry collector (`-e ENDPOINT`) |
-| `pisama-cc connect` | Connect to PISAMA platform (optional) |
+| `pisama-cc connect` | Connect to Pisama platform (optional) |
 | `pisama-cc sync` | Upload traces to platform |
 | `pisama-cc analyze` | Run failure detection (requires platform) |
 | `pisama-cc vault status` | Show PII tokenization vault status |
@@ -205,7 +205,7 @@ After installation, the hooks are automatically configured. To customize, edit `
 
 ## Platform Integration (Optional)
 
-For advanced features like failure detection and self-healing, connect to the PISAMA platform:
+For advanced features like failure detection and self-healing, connect to the Pisama platform:
 
 ```bash
 pisama-cc connect        # Authenticate
@@ -214,14 +214,14 @@ pisama-cc analyze        # Run detection
 ```
 
 Platform features:
-- 28 MAST failure mode detection
+- 25 MAST failure mode detection
 - AI-powered fix suggestions
 - Self-healing automation
 - Visual dashboard
 
-## Part of the PISAMA Platform
+## Part of the Pisama Platform
 
-`pisama-claude-code` is the Claude Code integration for the broader **PISAMA (Platform for Intelligent Self-healing AI Multi-Agent) Testing Platform**, which supports multiple agent frameworks:
+`pisama-claude-code` is the Claude Code integration for the broader **Pisama** multi-agent failure detection platform, which supports multiple agent frameworks:
 
 | Framework | Package | Status |
 |-----------|---------|--------|
@@ -262,8 +262,8 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Links
 
-- [Documentation](https://pisama.dev/docs/claude-code)
-- [PISAMA Platform](https://pisama.dev)
+- [Documentation](https://docs.pisama.ai/claude-code)
+- [Pisama Platform](https://pisama.ai)
 - [Issue Tracker](https://github.com/tn-pisama/pisama-claude-code/issues)
 - [Discussions](https://github.com/tn-pisama/pisama-claude-code/discussions)
 

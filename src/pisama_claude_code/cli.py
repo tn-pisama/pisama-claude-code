@@ -1,7 +1,7 @@
-"""PISAMA Claude Code CLI - Trace capture for Claude Code.
+"""Pisama Claude Code CLI - Trace capture for Claude Code.
 
 Command-line interface for capturing Claude Code traces and syncing
-to the PISAMA platform for analysis and self-healing.
+to the Pisama platform for analysis and self-healing.
 
 Quick Start (3 lines!):
     pip install pisama-claude-code    # Install package
@@ -18,7 +18,7 @@ Usage:
     pisama-cc demo         Run demo detection on sample traces
     pisama-cc export       Export traces to file (JSONL or OTEL format)
     pisama-cc export-otel  Export traces to OpenTelemetry collector
-    pisama-cc connect      Connect to PISAMA platform
+    pisama-cc connect      Connect to Pisama platform
     pisama-cc sync         Sync traces to platform
     pisama-cc analyze      Analyze traces (requires platform)
 
@@ -54,7 +54,7 @@ HOOKS_DIR = CLAUDE_DIR / "hooks"
 
 
 def get_config() -> dict:
-    """Load PISAMA config."""
+    """Load Pisama config."""
     if CONFIG_FILE.exists():
         try:
             return json.loads(CONFIG_FILE.read_text())
@@ -64,15 +64,15 @@ def get_config() -> dict:
 
 
 def save_config(config: dict):
-    """Save PISAMA config."""
+    """Save Pisama config."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     CONFIG_FILE.write_text(json.dumps(config, indent=2))
 
 
 @click.group()
-@click.version_option(version="0.4.0")
+@click.version_option(version="0.4.2")
 def main():
-    """PISAMA Claude Code - Trace capture and sync."""
+    """Pisama Claude Code - Trace capture and sync."""
     pass
 
 
@@ -83,7 +83,7 @@ GITHUB_URL = "https://github.com/tn-pisama/pisama-claude-code"
 @click.option("--force", "-f", is_flag=True, help="Overwrite existing hooks")
 @click.option("--no-auto-config", is_flag=True, help="Don't auto-update settings.local.json")
 def install(force: bool, no_auto_config: bool):
-    """Install PISAMA hooks to ~/.claude/hooks/.
+    """Install Pisama hooks to ~/.claude/hooks/.
 
     By default, automatically updates settings.local.json to enable hooks.
     Use --no-auto-config to skip automatic configuration.
@@ -94,11 +94,11 @@ def install(force: bool, no_auto_config: bool):
 
 @main.command()
 def verify():
-    """Verify PISAMA installation is working correctly.
+    """Verify Pisama installation is working correctly.
 
     Checks:
     - Hook files exist and are executable
-    - settings.local.json has PISAMA hooks configured
+    - settings.local.json has Pisama hooks configured
     - All required directories exist
 
     Exit code 0 if all checks pass, 1 otherwise.
@@ -111,7 +111,7 @@ def verify():
 
 @main.command()
 def uninstall():
-    """Remove PISAMA hooks from ~/.claude/hooks/."""
+    """Remove Pisama hooks from ~/.claude/hooks/."""
     from pisama_claude_code.install import uninstall as do_uninstall
     do_uninstall()
 
@@ -121,7 +121,7 @@ def uninstall():
 def demo(verbose: bool):
     """Run a demo detection on sample traces.
 
-    This demonstrates PISAMA's failure detection capabilities without
+    This demonstrates Pisama's failure detection capabilities without
     requiring platform connection. Uses bundled sample traces that
     showcase common agent failures.
 
@@ -132,7 +132,7 @@ def demo(verbose: bool):
     import importlib.resources
 
     click.echo("")
-    click.echo("🚀 PISAMA Demo - Instant Failure Detection")
+    click.echo("🚀 Pisama Demo - Instant Failure Detection")
     click.echo("=" * 55)
     click.echo("")
 
@@ -397,16 +397,16 @@ def _truncate(text: str, max_len: int = 200) -> str:
 
 
 @main.command()
-@click.option("--api-key", required=True, help="Your PISAMA API key")
+@click.option("--api-key", required=True, help="Your Pisama API key")
 @click.option("--api-url", default="https://api.maotesting.com", help="API base URL")
 @click.option("--auto-sync/--no-auto-sync", default=True, help="Enable auto-sync")
 def connect(api_key: str, api_url: str, auto_sync: bool):
-    """Connect to PISAMA platform."""
+    """Connect to Pisama platform."""
     if httpx is None:
         click.echo("❌ httpx required. Run: pip install httpx")
         return
 
-    click.echo("🔗 Connecting to PISAMA platform...")
+    click.echo("🔗 Connecting to Pisama platform...")
 
     # Validate API key
     try:
@@ -429,7 +429,7 @@ def connect(api_key: str, api_url: str, auto_sync: bool):
     config["connected_at"] = datetime.now(timezone.utc).isoformat()
     save_config(config)
 
-    click.echo("✅ Connected to PISAMA platform")
+    click.echo("✅ Connected to Pisama platform")
     click.echo(f"   API URL: {api_url}")
     click.echo(f"   Auto-sync: {'enabled' if auto_sync else 'disabled'}")
 
@@ -442,7 +442,7 @@ def connect(api_key: str, api_url: str, auto_sync: bool):
 @click.option("--last", default=100, help="Number of recent traces to sync")
 @click.option("--include-outputs/--no-outputs", default=False, help="Include tool outputs")
 def sync(last: int, include_outputs: bool):
-    """Sync traces to PISAMA platform."""
+    """Sync traces to Pisama platform."""
     if httpx is None:
         click.echo("❌ httpx required. Run: pip install httpx")
         return
@@ -849,10 +849,10 @@ def fix_apply(fix_id: str, detection_id: str, dry_run: bool, force: bool):
 
 @main.command()
 def status():
-    """Show PISAMA installation and connection status."""
+    """Show Pisama installation and connection status."""
     config_data = get_config()
 
-    click.echo("📊 PISAMA Status")
+    click.echo("📊 Pisama Status")
     click.echo("=" * 40)
 
     # Check hook installation
@@ -939,11 +939,11 @@ def status():
             pisama_in_post = any("pisama" in str(h).lower() for h in post_hooks)
 
             if pisama_in_pre and pisama_in_post:
-                click.echo("   ✅ PISAMA hooks configured in settings")
+                click.echo("   ✅ Pisama hooks configured in settings")
             elif pisama_in_pre or pisama_in_post:
-                click.echo("   ⚠️  PISAMA hooks partially configured")
+                click.echo("   ⚠️  Pisama hooks partially configured")
             else:
-                click.echo("   ❌ PISAMA hooks not in settings")
+                click.echo("   ❌ Pisama hooks not in settings")
                 click.echo("   Add hooks to settings.local.json (see 'pisama-cc install' output)")
         except json.JSONDecodeError:
             click.echo("   ⚠️  Could not parse settings file")
@@ -1267,7 +1267,7 @@ def prepare_sync_payload(traces: list, include_outputs: bool) -> dict:
 
     return {
         "source": "claude-code",
-        "version": "0.3.5",
+        "version": "0.4.2",
         "uploaded_at": datetime.now(timezone.utc).isoformat(),
         "trace_count": len(clean_traces),
         "traces": clean_traces,
@@ -1338,7 +1338,7 @@ def vault_status():
 
     vault_path = CONFIG_DIR / "vault.db"
 
-    click.echo("🔐 PISAMA Vault Status")
+    click.echo("🔐 Pisama Vault Status")
     click.echo("=" * 50)
 
     # Check keychain
@@ -1854,7 +1854,7 @@ def lite_init(
         click.echo(f"   Config saved to: {fallback_path}")
         click.echo("   Install PyYAML for YAML support: pip install pyyaml")
 
-    click.echo("PISAMA Lite Mode Initialized")
+    click.echo("Pisama Lite Mode Initialized")
     click.echo("=" * 50)
     click.echo(f"   Config: {DEFAULT_CONFIG_PATH}")
     click.echo(f"   Database: {config.db_path}")
@@ -1995,7 +1995,7 @@ def lite_dashboard(session: Optional[str]):
     stats = data["stats"]
 
     click.echo("")
-    click.echo("PISAMA Lite Mode Dashboard")
+    click.echo("Pisama Lite Mode Dashboard")
     click.echo("=" * 55)
 
     # Overall stats
@@ -2063,7 +2063,7 @@ def lite_dashboard(session: Optional[str]):
 def lite_export(output: str, fmt: str):
     """Export detection results for platform import.
 
-    Creates a JSON file that can be imported into the PISAMA platform
+    Creates a JSON file that can be imported into the Pisama platform
     for advanced analysis, team dashboards, and historical tracking.
 
     Examples:
@@ -2096,7 +2096,7 @@ def lite_export(output: str, fmt: str):
     click.echo("")
 
     if count > 0 and config.platform_url:
-        click.echo("To import into PISAMA platform:")
+        click.echo("To import into Pisama platform:")
         click.echo(f"   curl -X POST {config.platform_url}/v1/import/lite \\")
         click.echo(f"     -H 'Authorization: Bearer <api-key>' \\")
         click.echo(f"     -F 'file=@{output_path}'")

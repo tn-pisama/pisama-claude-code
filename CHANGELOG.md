@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Optional `[otel]` dependency: `pip install pisama-claude-code[otel]`
 
 ### Changed
-- Updated description to reflect role in broader PISAMA platform
+- Updated description to reflect role in broader Pisama platform
 
 ## [0.3.5] - 2025-01-05
 
