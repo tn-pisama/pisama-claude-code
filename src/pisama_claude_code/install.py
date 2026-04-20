@@ -71,7 +71,7 @@ def install(force: bool = False, auto_config: bool = True):
     # Update settings.local.json
     settings_updated = _update_settings(claude_dir, hooks_dir, auto_config=auto_config)
 
-    print("\nPISAMA installation complete!")
+    print("\nPisama installation complete!")
     print(f"Hooks installed to: {hooks_dir}")
     print(f"Traces will be stored in: {pisama_dir / 'traces'}")
 
@@ -210,7 +210,7 @@ def uninstall():
             hook_path.unlink()
             print(f"Removed {filename}")
 
-    print("\nPISAMA hooks uninstalled.")
+    print("\nPisama hooks uninstalled.")
     print("Note: Config and traces in ~/.claude/pisama/ were preserved.")
 
 
@@ -280,7 +280,7 @@ def verify() -> bool:
             pass
 
     # Print results
-    print("\nPISAMA Installation Verification")
+    print("\nPisama Installation Verification")
     print("=" * 40)
 
     all_passed = True

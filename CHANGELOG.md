@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-04-19
+
+### Fixed
+- Normalize "PISAMA" → "Pisama" in user-facing install/verify/uninstall output (environment variable names remain uppercase).
+- Update project metadata: description, maintainer email, and homepage URLs now use the canonical "Pisama" brand and `pisama.ai` domain.
+
 ## [0.4.0] - 2026-01-05
 
 ### Added
