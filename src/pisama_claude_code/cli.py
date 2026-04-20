@@ -70,9 +70,9 @@ def save_config(config: dict):
 
 
 @click.group()
-@click.version_option(version="0.4.0")
+@click.version_option(version="0.4.3")
 def main():
-    """PISAMA Claude Code - Trace capture and sync."""
+    """Pisama Claude Code - Trace capture and sync."""
     pass
 
 
