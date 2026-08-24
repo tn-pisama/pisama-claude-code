@@ -101,9 +101,10 @@ def _fallback_detection(hook_data: dict, session_id: str) -> None:
     Provides basic loop detection without the full pisama-core stack.
     """
     import sqlite3
-    from pathlib import Path
 
-    db_path = Path.home() / ".claude" / "pisama" / "traces" / "pisama.db"
+    from pisama_claude_code.paths import get_config_dir
+
+    db_path = get_config_dir() / "traces" / "pisama.db"
 
     if not db_path.exists():
         sys.exit(0)

@@ -385,9 +385,10 @@ def _fallback_capture(hook_data: dict, hook_type: str) -> None:
     """
     import sqlite3
     from datetime import datetime, timezone
-    from pathlib import Path
 
-    traces_dir = Path.home() / ".claude" / "pisama" / "traces"
+    from pisama_claude_code.paths import get_config_dir
+
+    traces_dir = get_config_dir() / "traces"
     db_path = traces_dir / "pisama.db"
 
     # Ensure directory exists

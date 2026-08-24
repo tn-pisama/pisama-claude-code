@@ -17,6 +17,7 @@ from pisama_core.adapters import PlatformAdapter, InjectionResult, InjectionMeth
 from pisama_core.injection import EnforcementLevel
 from pisama_core.traces import Platform, Span, SpanKind, SpanStatus
 
+from pisama_claude_code.paths import get_config_dir
 from pisama_claude_code.trace_converter import TraceConverter
 from pisama_claude_code.storage import TraceStorage
 
@@ -48,7 +49,7 @@ class ClaudeCodeAdapter(PlatformAdapter):
         pisama_dir: Optional[Path] = None,
         storage: Optional[TraceStorage] = None,
     ):
-        self.pisama_dir = pisama_dir or (Path.home() / ".claude" / "pisama")
+        self.pisama_dir = pisama_dir or get_config_dir()
         self.traces_dir = self.pisama_dir / "traces"
         self.alert_path = Path("/tmp/pisama-alert.json")
         # Durable block/terminate store. The guardian hook runs as a FRESH

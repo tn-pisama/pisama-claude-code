@@ -32,12 +32,17 @@ OTEL Export:
     pisama-cc export-otel -e http://localhost:4318/v1/traces
 """
 
-import click
-import json
 import gzip
-from pathlib import Path
+import json
+import re
+import unicodedata
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
+
+import click
+
+from pisama_claude_code.paths import get_config_dir, write_private_text
 
 try:
     import httpx
@@ -47,7 +52,7 @@ except ImportError:
 
 # Config paths
 CLAUDE_DIR = Path.home() / ".claude"
-CONFIG_DIR = CLAUDE_DIR / "pisama"
+CONFIG_DIR = get_config_dir()
 CONFIG_FILE = CONFIG_DIR / "config.json"
 TRACES_DIR = CONFIG_DIR / "traces"
 HOOKS_DIR = CLAUDE_DIR / "hooks"
@@ -56,6 +61,14 @@ HOOKS_DIR = CLAUDE_DIR / "hooks"
 # for a short-lived token, then send it as a Bearer credential.
 API_PREFIX = "/api/v1"
 DEFAULT_API_URL = "https://api.pisama.ai"
+REGISTERED_SOURCE_FIELDS = (
+    "source_instance_id",
+    "environment",
+    "subject_type",
+    "subject_id",
+)
+REGISTERED_ENVIRONMENTS = ("development", "staging", "production")
+SUBJECT_TYPE_PATTERN = re.compile(r"^[a-z0-9_]+$")
 
 
 def get_config() -> dict:
@@ -70,8 +83,47 @@ def get_config() -> dict:
 
 def save_config(config: dict):
     """Save PISAMA config."""
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    CONFIG_FILE.write_text(json.dumps(config, indent=2))
+    write_private_text(CONFIG_FILE, json.dumps(config, indent=2))
+
+
+def _normalized_identifier(value: object, field: str) -> str:
+    """Normalize and bound an identifier without changing its meaning."""
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be text")
+    normalized = unicodedata.normalize("NFC", value).strip()
+    if not normalized or len(normalized) > 255:
+        raise ValueError(f"{field} must contain between 1 and 255 characters")
+    return normalized
+
+
+def _validate_registered_source_values(identity: dict) -> None:
+    """Validate values after the identity completeness check."""
+    if identity["source_instance_id"].lower() == "legacy":
+        raise ValueError("source_instance_id cannot be legacy")
+    if identity["environment"] not in REGISTERED_ENVIRONMENTS:
+        raise ValueError("environment must be development, staging, or production")
+    subject_type = identity["subject_type"]
+    if not isinstance(subject_type, str):
+        raise ValueError("subject_type must be text")
+    if len(subject_type) > 32 or not SUBJECT_TYPE_PATTERN.fullmatch(subject_type):
+        raise ValueError(
+            "subject_type must contain 1 to 32 lowercase letters, digits, or underscores"
+        )
+
+
+def registered_source_identity(values: dict) -> dict:
+    """Return a validated registered-source identity or an empty legacy identity."""
+    identity = {field: values.get(field) for field in REGISTERED_SOURCE_FIELDS}
+    supplied_count = sum(value is not None for value in identity.values())
+    if supplied_count == 0:
+        return {}
+    if supplied_count != len(REGISTERED_SOURCE_FIELDS):
+        raise ValueError(f"{', '.join(REGISTERED_SOURCE_FIELDS)} must be supplied together")
+
+    for field in ("source_instance_id", "subject_id"):
+        identity[field] = _normalized_identifier(identity[field], field)
+    _validate_registered_source_values(identity)
+    return identity
 
 
 def api_url(config: dict, path: str) -> str:
@@ -450,8 +502,39 @@ def _truncate(text: str, max_len: int = 200) -> str:
 @click.option("--api-key", required=True, help="Your Pisama API key")
 @click.option("--api-url", "api_url_opt", default=DEFAULT_API_URL, help="API base URL")
 @click.option("--auto-sync/--no-auto-sync", default=True, help="Enable auto-sync")
-def connect(api_key: str, api_url_opt: str, auto_sync: bool):
+@click.option("--source-instance-id", help="Registered source instance ID")
+@click.option(
+    "--environment",
+    type=click.Choice(REGISTERED_ENVIRONMENTS, case_sensitive=True),
+    help="Registered source environment",
+)
+@click.option("--subject-type", help="Registered subject type")
+@click.option("--subject-id", help="Registered subject ID")
+def connect(
+    api_key: str,
+    api_url_opt: str,
+    auto_sync: bool,
+    source_instance_id: Optional[str],
+    environment: Optional[str],
+    subject_type: Optional[str],
+    subject_id: Optional[str],
+):
     """Connect to PISAMA platform."""
+    try:
+        supplied_identity = registered_source_identity(
+            {
+                "source_instance_id": source_instance_id,
+                "environment": environment,
+                "subject_type": subject_type,
+                "subject_id": subject_id,
+            }
+        )
+        config = get_config()
+        if not supplied_identity:
+            registered_source_identity(config)
+    except (TypeError, ValueError) as exc:
+        raise click.UsageError(str(exc)) from exc
+
     if httpx is None:
         click.echo("❌ httpx required. Run: pip install httpx")
         return
@@ -472,11 +555,11 @@ def connect(api_key: str, api_url_opt: str, auto_sync: bool):
         click.echo(f"⚠️  Could not reach {api_url_opt} - saving config for later")
 
     # Save config
-    config = get_config()
     config["api_key"] = api_key
     config["api_url"] = api_url_opt
     config["auto_sync"] = auto_sync
     config["connected_at"] = datetime.now(timezone.utc).isoformat()
+    config.update(supplied_identity)
     save_config(config)
 
     click.echo("✅ Connected to PISAMA platform")
@@ -503,6 +586,12 @@ def sync(last: int, include_outputs: bool):
         click.echo("❌ Not connected. Run 'pisama-cc connect --api-key <key>' first")
         return
 
+    try:
+        source_identity = registered_source_identity(config)
+    except (TypeError, ValueError) as exc:
+        click.echo(f"❌ Invalid registered source configuration: {exc}")
+        return
+
     click.echo(f"📤 Syncing last {last} traces...")
 
     # Load traces
@@ -512,7 +601,7 @@ def sync(last: int, include_outputs: bool):
         return
 
     # Prepare payload (redact sensitive data)
-    payload = prepare_sync_payload(traces_list, include_outputs)
+    payload = prepare_sync_payload(traces_list, include_outputs, source_identity)
 
     click.echo(f"   Found {len(traces_list)} traces")
     click.echo(f"   Payload size: {len(json.dumps(payload)) // 1024} KB")
@@ -1202,6 +1291,31 @@ def export_otel(last: int, endpoint: str, service_name: str, header: tuple):
 
 # Helper functions
 
+def _captured_agent_identity(trace: dict) -> dict:
+    """Read agent identity from a row, falling back only to its captured raw data."""
+    raw = trace.get("raw")
+    if not isinstance(raw, dict):
+        raw = {}
+    fields = ("agent_id", "agent_type", "is_sidechain")
+    return {field: trace[field] if field in trace else raw.get(field) for field in fields}
+
+
+def _normalized_hook_type(trace: dict, attributes: dict) -> str:
+    """Normalize legacy hook names to the current Claude Code names."""
+    hook_type = trace.get("hook_type") or attributes.get("hook_type", "")
+    return {"pre": "PreToolUse", "post": "PostToolUse"}.get(hook_type, hook_type)
+
+
+def _usage_fields(trace: dict) -> dict:
+    """Extract token usage from new-format rows."""
+    usage = trace.get("usage") or {}
+    return {
+        "input_tokens": usage.get("input_tokens", 0),
+        "output_tokens": usage.get("output_tokens", 0),
+        "cache_read_tokens": usage.get("cache_read_input_tokens", 0),
+    }
+
+
 def normalize_trace(t: dict) -> dict:
     """Normalize trace to consistent format (handles old and new formats)."""
     # New format uses 'name', old uses 'tool_name'
@@ -1212,13 +1326,7 @@ def normalize_trace(t: dict) -> dict:
 
     # New format puts hook_type in attributes, old has it at top level
     attrs = t.get("attributes", {})
-    hook_type = t.get("hook_type") or attrs.get("hook_type", "")
-
-    # Normalize hook_type (pre -> PreToolUse, post -> PostToolUse)
-    if hook_type == "pre":
-        hook_type = "PreToolUse"
-    elif hook_type == "post":
-        hook_type = "PostToolUse"
+    hook_type = _normalized_hook_type(t, attrs)
 
     # New format uses 'input_data', old uses 'tool_input'
     tool_input = t.get("tool_input") or t.get("input_data", {})
@@ -1226,11 +1334,8 @@ def normalize_trace(t: dict) -> dict:
     # Session ID might be in different places
     session_id = t.get("session_id") or t.get("trace_id", "")[:8]
 
-    # Extract usage data (new fields)
-    usage = t.get("usage", {})
-    input_tokens = usage.get("input_tokens", 0) if usage else 0
-    output_tokens = usage.get("output_tokens", 0) if usage else 0
-    cache_read = usage.get("cache_read_input_tokens", 0) if usage else 0
+    agent_identity = _captured_agent_identity(t)
+    usage_fields = _usage_fields(t)
 
     return {
         "tool_name": tool_name,
@@ -1241,15 +1346,14 @@ def normalize_trace(t: dict) -> dict:
         "working_dir": t.get("working_dir") or attrs.get("working_dir", ""),
         # Model and token usage
         "model": t.get("model"),
-        "input_tokens": input_tokens,
-        "output_tokens": output_tokens,
-        "cache_read_tokens": cache_read,
+        **usage_fields,
         "cost_usd": t.get("cost_usd", 0.0),
         # Input/Reasoning/Output content
         "user_input": t.get("user_input"),
         "reasoning": t.get("reasoning"),
         "ai_output": t.get("ai_output"),
         "ai_response": t.get("ai_response"),  # Legacy field
+        **agent_identity,
         "_raw": t,
     }
 
@@ -1280,7 +1384,11 @@ def load_recent_traces(n: int) -> list:
     return traces[-n:]
 
 
-def prepare_sync_payload(traces: list, include_outputs: bool) -> dict:
+def prepare_sync_payload(
+    traces: list,
+    include_outputs: bool,
+    source_identity: Optional[dict] = None,
+) -> dict:
     """Prepare traces for sync, redacting sensitive data."""
     clean_traces = []
 
@@ -1300,6 +1408,9 @@ def prepare_sync_payload(traces: list, include_outputs: bool) -> dict:
             "user_input": t.get("user_input"),
             "reasoning": t.get("reasoning"),
             "ai_output": t.get("ai_output"),
+            "agent_id": t.get("agent_id"),
+            "agent_type": t.get("agent_type"),
+            "is_sidechain": t.get("is_sidechain"),
         }
 
         # Sanitize tool input
@@ -1315,13 +1426,16 @@ def prepare_sync_payload(traces: list, include_outputs: bool) -> dict:
 
         clean_traces.append(clean)
 
-    return {
+    payload = {
         "source": "claude-code",
         "version": "0.3.5",
         "uploaded_at": datetime.now(timezone.utc).isoformat(),
         "trace_count": len(clean_traces),
         "traces": clean_traces,
     }
+    if source_identity:
+        payload.update(registered_source_identity(source_identity))
+    return payload
 
 
 def sanitize_input(inp: dict) -> dict:

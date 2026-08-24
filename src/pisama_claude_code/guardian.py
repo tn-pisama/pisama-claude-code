@@ -21,6 +21,7 @@ from pisama_core.scoring import ScoringEngine
 from pisama_core.traces import Trace
 
 from pisama_claude_code.adapter import ClaudeCodeAdapter
+from pisama_claude_code.paths import get_config_dir
 from pisama_claude_code.storage import TraceStorage
 
 # After this many repeated blocked tool calls in one session, a durable BLOCK is
@@ -96,7 +97,7 @@ class Guardian:
         config: Optional[GuardianConfig] = None,
         pisama_dir: Optional[Path] = None,
     ):
-        self.pisama_dir = pisama_dir or (Path.home() / ".claude" / "pisama")
+        self.pisama_dir = pisama_dir or get_config_dir()
         self.config_path = self.pisama_dir / "config.json"
 
         # Load config

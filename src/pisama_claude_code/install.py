@@ -11,6 +11,11 @@ import sys
 from pathlib import Path
 from typing import Dict, Any
 
+from pisama_claude_code.paths import (
+    ensure_private_directory,
+    get_config_dir,
+    write_private_text,
+)
 
 HOOK_TEMPLATE = '''#!{python_path}
 """Auto-generated PISAMA capture hook."""
@@ -29,12 +34,12 @@ def install(force: bool = False, auto_config: bool = True):
     """
     claude_dir = Path.home() / ".claude"
     hooks_dir = claude_dir / "hooks"
-    pisama_dir = claude_dir / "pisama"
+    pisama_dir = get_config_dir()
 
     # Ensure directories exist
     hooks_dir.mkdir(parents=True, exist_ok=True)
-    pisama_dir.mkdir(parents=True, exist_ok=True)
-    (pisama_dir / "traces").mkdir(exist_ok=True)
+    ensure_private_directory(pisama_dir)
+    ensure_private_directory(pisama_dir / "traces")
 
     # Use the Python executable that has pisama_claude_code installed
     python_path = sys.executable
@@ -65,8 +70,10 @@ def install(force: bool = False, auto_config: bool = True):
             pass
 
     if not config_path.exists():
-        config_path.write_text(json.dumps(default_config, indent=2))
+        write_private_text(config_path, json.dumps(default_config, indent=2))
         print("Installed default config")
+    else:
+        config_path.chmod(0o600)
 
     # Update settings.local.json
     settings_updated = _update_settings(claude_dir, hooks_dir, auto_config=auto_config)
